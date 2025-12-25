@@ -1,0 +1,58 @@
+# Root level .dockerignore for multi-service builds
+# This applies when building with context at root (like worker service)
+
+# Python cache files
+**/__pycache__/
+**/*.pyc
+**/*.pyo
+**/*.pyd
+.Python
+**/*.so
+
+# Virtual environments
+**/venv/
+**/env/
+**/ENV/
+**/.venv
+
+# IDE files
+.vscode/
+.idea/
+**/*.swp
+**/*.swo
+**/*~
+
+# Documentation (exclude from container builds)
+**/*.md
+!**/requirements.txt
+
+# Git files
+.git/
+.gitignore
+**/.git/
+**/.gitignore
+
+# CI/CD
+.github/
+
+# Environment files
+.env
+.env.*
+**/.env
+**/.env.*
+
+# Build artifacts
+**/dist/
+**/build/
+**/*.egg-info/
+
+# Test files
+**/tests/
+**/test_*.py
+**/*_test.py
+
+# Node modules (for frontend)
+**/node_modules/
+
+# Database volumes
+postgres_data/
