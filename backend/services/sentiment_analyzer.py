@@ -2,20 +2,35 @@ import os
 import asyncio
 import httpx
 import json
+import re
 import logging
 from typing import Optional
 from transformers import pipeline
+from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 
 logger = logging.getLogger(__name__)
 
 def build_prompt(text: str, task: str) -> str:
+    """Build structured prompt that requests JSON-only responses."""
     if not isinstance(text, str) or not isinstance(task, str):
         raise ValueError("Input text and task must be strings")
     
     if task == "sentiment":
-        return f"Analyze the sentiment of the following text and respond with 'positive', 'negative', or 'neutral':\n\n{text}"
+        return f"""Analyze the sentiment of the following text and respond with ONLY a valid JSON object in this exact format:
+{{"label": "positive|negative|neutral", "confidence": 0.85}}
+
+Do not include any explanations, markdown formatting, or additional text. Only return the JSON object.
+
+Text to analyze:
+{text}"""
     elif task == "emotion":
-        return f"Identify the primary emotion expressed in the following text (e.g., joy, sadness, anger, fear, surprise, disgust):\n\n{text}"
+        return f"""Identify the primary emotion in the following text and respond with ONLY a valid JSON object in this exact format:
+{{"emotion": "joy|sadness|anger|fear|surprise|disgust|neutral", "confidence": 0.85}}
+
+Do not include any explanations, markdown formatting, or additional text. Only return the JSON object.
+
+Text to analyze:
+{text}"""
     else:
         raise ValueError("Unknown task")
 
@@ -80,8 +95,43 @@ class SentimentAnalyzer:
         else:
             return await self._analyze_external(text, "emotion")
 
+    def _parse_json_response(self, content: str) -> dict:
+        """Parse JSON response, handling markdown formatting and edge cases."""
+        # Remove markdown code blocks if present
+        content = content.strip()
+        
+        # Handle ```json formatting
+        if content.startswith("```"):
+            # Extract content between ``` markers
+            match = re.search(r'```(?:json)?\s*({.*?})\s*```', content, re.DOTALL)
+            if match:
+                content = match.group(1)
+            else:
+                # Try removing just the ``` markers
+                content = re.sub(r'```(?:json)?', '', content).strip()
+        
+        # Parse the JSON
+        try:
+            return json.loads(content)
+        except json.JSONDecodeError as e:
+            logger.warning(f"Failed to parse JSON response: {content}")
+            # Try to extract JSON object using regex as fallback
+            match = re.search(r'{.*}', content, re.DOTALL)
+            if match:
+                try:
+                    return json.loads(match.group(0))
+                except json.JSONDecodeError:
+                    pass
+            raise ValueError(f"Could not parse JSON from response: {e}")
+    
+    @retry(
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=2, max=10),
+        retry=retry_if_exception_type((httpx.HTTPStatusError, httpx.RequestError)),
+        reraise=True
+    )
     async def _analyze_external(self, text: str, task: str) -> dict:
-        """Call external LLM API (Groq/OpenAI) for sentiment or emotion analysis."""
+        """Call external LLM API (Groq/OpenAI) for sentiment or emotion analysis with retry logic."""
         if not self.api_key:
             raise ValueError("EXTERNAL_LLM_API_KEY not configured")
         
@@ -98,11 +148,11 @@ class SentimentAnalyzer:
         payload = {
             "model": self.llm_model,
             "messages": [
-                {"role": "system", "content": "You are a precise text analysis assistant. Respond with only the requested classification label in lowercase."},
+                {"role": "system", "content": "You are a precise text analysis assistant. Respond with only valid JSON objects as requested."},
                 {"role": "user", "content": prompt}
             ],
-            "temperature": 0.3,
-            "max_tokens": 50
+            "temperature": 0.2,  # Lower temperature for more consistent outputs
+            "max_tokens": 100
         }
         
         try:
@@ -112,38 +162,42 @@ class SentimentAnalyzer:
                 data = response.json()
                 
                 # Extract the response text
-                content = data.get("choices", [{}])[0].get("message", {}).get("content", "").strip().lower()
-                logger.debug(f"External API response content: {content}")
+                content = data.get("choices", [{}])[0].get("message", {}).get("content", "").strip()
+                logger.debug(f"External API raw response: {content}")
+                
+                # Parse JSON response carefully
+                parsed = self._parse_json_response(content)
+                logger.debug(f"Parsed JSON: {parsed}")
 
-                # Parse and normalize the response
+                # Normalize the response based on task
                 if task == "sentiment":
-                    # Extract sentiment label
-                    if "positive" in content:
-                        label = "positive"
-                    elif "negative" in content:
-                        label = "negative"
-                    else:
+                    label = parsed.get("label", "neutral").lower()
+                    confidence = parsed.get("confidence", 0.85)
+                    
+                    # Validate label
+                    if label not in ["positive", "negative", "neutral"]:
+                        logger.warning(f"Invalid sentiment label '{label}', defaulting to 'neutral'")
                         label = "neutral"
                     
                     return {
                         'sentiment_label': label,
-                        'confidence_score': 0.85,  # External APIs don't always provide confidence
+                        'confidence_score': float(confidence),
                         'model_name': self.llm_model
                     }
                 
                 elif task == "emotion":
-                    # Extract emotion label
-                    emotions = ["joy", "sadness", "anger", "fear", "surprise", "disgust", "neutral"]
-                    detected_emotion = "neutral"
+                    emotion = parsed.get("emotion", "neutral").lower()
+                    confidence = parsed.get("confidence", 0.85)
                     
-                    for emotion in emotions:
-                        if emotion in content:
-                            detected_emotion = emotion
-                            break
+                    # Validate emotion
+                    valid_emotions = ["joy", "sadness", "anger", "fear", "surprise", "disgust", "neutral"]
+                    if emotion not in valid_emotions:
+                        logger.warning(f"Invalid emotion '{emotion}', defaulting to 'neutral'")
+                        emotion = "neutral"
                     
                     return {
-                        'emotion': detected_emotion,
-                        'confidence_score': 0.85,
+                        'emotion': emotion,
+                        'confidence_score': float(confidence),
                         'model_name': self.llm_model
                     }
                 
@@ -151,10 +205,14 @@ class SentimentAnalyzer:
                     raise ValueError(f"Unknown task: {task}")
                     
         except httpx.HTTPStatusError as e:
-            logger.error(f"HTTP error calling external API: {e}")
+            logger.error(f"HTTP error calling external API (attempt will retry): {e}")
             raise
         except httpx.RequestError as e:
-            logger.error(f"Request error calling external API: {e}")
+            logger.error(f"Request error calling external API (attempt will retry): {e}")
+            raise
+        except ValueError as e:
+            # Don't retry on validation errors
+            logger.error(f"Validation error in external analysis: {e}")
             raise
         except Exception as e:
             logger.error(f"Unexpected error in external analysis: {e}")

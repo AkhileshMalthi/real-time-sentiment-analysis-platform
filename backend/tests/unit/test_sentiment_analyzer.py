@@ -204,7 +204,7 @@ class TestSentimentAnalyzerExternal:
         """Test external sentiment analysis with positive response."""
         mock_response = Mock()
         mock_response.json.return_value = {
-            "choices": [{"message": {"content": "positive"}}]
+            "choices": [{"message": {"content": '{"label": "positive", "confidence": 0.95}'}}]
         }
         
         with patch('httpx.AsyncClient') as mock_client:
@@ -213,7 +213,7 @@ class TestSentimentAnalyzerExternal:
             result = await analyzer.analyze_sentiment("Great product!")
             
             assert result['sentiment_label'] == 'positive'
-            assert result['confidence_score'] == 0.85
+            assert result['confidence_score'] == 0.95
             assert result['model_name'] == 'test-model'
     
     @pytest.mark.asyncio
@@ -221,7 +221,7 @@ class TestSentimentAnalyzerExternal:
         """Test external sentiment analysis with negative response."""
         mock_response = Mock()
         mock_response.json.return_value = {
-            "choices": [{"message": {"content": "negative"}}]
+            "choices": [{"message": {"content": '{"label": "negative", "confidence": 0.90}'}}]
         }
         
         with patch('httpx.AsyncClient') as mock_client:
@@ -230,13 +230,14 @@ class TestSentimentAnalyzerExternal:
             result = await analyzer.analyze_sentiment("Terrible experience!")
             
             assert result['sentiment_label'] == 'negative'
+            assert result['confidence_score'] == 0.90
     
     @pytest.mark.asyncio
     async def test_analyze_sentiment_external_neutral(self, analyzer):
         """Test external sentiment analysis with neutral response."""
         mock_response = Mock()
         mock_response.json.return_value = {
-            "choices": [{"message": {"content": "neutral"}}]
+            "choices": [{"message": {"content": '{"label": "neutral", "confidence": 0.85}'}}]
         }
         
         with patch('httpx.AsyncClient') as mock_client:
@@ -245,13 +246,14 @@ class TestSentimentAnalyzerExternal:
             result = await analyzer.analyze_sentiment("The sky is blue.")
             
             assert result['sentiment_label'] == 'neutral'
+            assert result['confidence_score'] == 0.85
     
     @pytest.mark.asyncio
     async def test_analyze_emotion_external(self, analyzer):
         """Test external emotion analysis."""
         mock_response = Mock()
         mock_response.json.return_value = {
-            "choices": [{"message": {"content": "joy"}}]
+            "choices": [{"message": {"content": '{"emotion": "joy", "confidence": 0.92}'}}]
         }
         
         with patch('httpx.AsyncClient') as mock_client:
@@ -260,15 +262,15 @@ class TestSentimentAnalyzerExternal:
             result = await analyzer.analyze_emotion("I'm so happy today!")
             
             assert result['emotion'] == 'joy'
-            assert result['confidence_score'] == 0.85
+            assert result['confidence_score'] == 0.92
             assert result['model_name'] == 'test-model'
     
     @pytest.mark.asyncio
     async def test_analyze_emotion_external_multiple_emotions(self, analyzer):
-        """Test that the first detected emotion is returned."""
+        """Test that the detected emotion is returned."""
         mock_response = Mock()
         mock_response.json.return_value = {
-            "choices": [{"message": {"content": "The text expresses sadness and anger"}}]
+            "choices": [{"message": {"content": '{"emotion": "sadness", "confidence": 0.88}'}}]
         }
         
         with patch('httpx.AsyncClient') as mock_client:
@@ -276,8 +278,8 @@ class TestSentimentAnalyzerExternal:
             
             result = await analyzer.analyze_emotion("I'm upset and frustrated!")
             
-            # Should detect 'sadness' first (it appears first in the emotions list)
-            assert result['emotion'] in ['sadness', 'anger']
+            assert result['emotion'] == 'sadness'
+            assert result['confidence_score'] == 0.88
     
     @pytest.mark.asyncio
     async def test_external_api_no_api_key(self):
@@ -316,7 +318,7 @@ class TestSentimentAnalyzerExternal:
         long_text = "a" * 3000
         mock_response = Mock()
         mock_response.json.return_value = {
-            "choices": [{"message": {"content": "neutral"}}]
+            "choices": [{"message": {"content": '{"label": "neutral", "confidence": 0.85}'}}]
         }
         
         with patch('httpx.AsyncClient') as mock_client:
@@ -346,11 +348,11 @@ class TestSentimentAnalyzerExternal:
         texts = ["Great!", "Bad!", "Okay"]
         
         mock_response1 = Mock()
-        mock_response1.json.return_value = {"choices": [{"message": {"content": "positive"}}]}
+        mock_response1.json.return_value = {"choices": [{"message": {"content": '{"label": "positive", "confidence": 0.95}'}}]}
         mock_response2 = Mock()
-        mock_response2.json.return_value = {"choices": [{"message": {"content": "negative"}}]}
+        mock_response2.json.return_value = {"choices": [{"message": {"content": '{"label": "negative", "confidence": 0.90}'}}]}
         mock_response3 = Mock()
-        mock_response3.json.return_value = {"choices": [{"message": {"content": "neutral"}}]}
+        mock_response3.json.return_value = {"choices": [{"message": {"content": '{"label": "neutral", "confidence": 0.85}'}}]}
         
         with patch('httpx.AsyncClient') as mock_client:
             mock_post = AsyncMock(side_effect=[mock_response1, mock_response2, mock_response3])
