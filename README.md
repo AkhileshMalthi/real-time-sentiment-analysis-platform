@@ -1,3 +1,68 @@
+# Real-Time Sentiment Analysis Platform
+
+A production-grade, real-time sentiment analysis platform that processes social media posts, analyzes sentiment and emotions using AI models, and provides live visualization through a web dashboard.
+
+![Platform Status](https://img.shields.io/badge/status-production--ready-success)
+![Python](https://img.shields.io/badge/python-3.12-blue)
+![React](https://img.shields.io/badge/react-18.2-blue)
+![Docker](https://img.shields.io/badge/docker-compose-blue)
+
+## 🌟 Features
+
+- **Real-time Processing**: Analyze social media posts in real-time using Redis Streams
+- **Dual AI Analysis**: Combine local Hugging Face models with external LLM APIs (Groq/OpenAI/Anthropic)
+- **Live Dashboard**: React-based dashboard with WebSocket updates and interactive charts
+- **Sentiment & Emotion Detection**: Classify sentiment (positive/negative/neutral) and detect 6 emotions
+- **Intelligent Alerting**: Automated alerts when negative sentiment exceeds thresholds
+- **Microservices Architecture**: 6 containerized services with Docker Compose orchestration
+- **Production-Ready**: Comprehensive error handling, logging, and graceful degradation
+
+## 📋 Prerequisites
+
+- **Docker** 20.10+ and **Docker Compose** 2.0+
+- **API Key** for external LLM (Groq, OpenAI, or Anthropic) - [Get Groq API Key](https://console.groq.com/keys)
+- **System Resources**: 4GB RAM minimum, 8GB recommended
+- **Ports Available**: 3000 (frontend), 8000 (backend)
+
+## 🚀 Quick Start
+
+### 1. Clone and Configure
+
+```bash
+git clone <repository-url>
+cd sentiment-analysis-platform
+
+# Create environment file from template
+cp .env.example .env
+
+# Edit .env and add your API key
+# Required: LLM_API_KEY=your_api_key_here
+# Optional: Adjust other settings as needed
+```
+
+### 2. Start All Services
+
+```bash
+# Start all 6 services
+docker-compose up -d
+
+# Verify all services are running
+docker-compose ps
+
+# View logs
+docker-compose logs -f
+```
+
+### 3. Access the Dashboard
+
+Open your browser to **http://localhost:3000**
+
+The dashboard will display:
+- Real-time sentiment distribution (pie chart)
+- Sentiment trends over time (line chart)
+- Live post feed with sentiment badges
+- Key metrics (total posts, positive/negative/neutral counts)
+
 ## Objective
 Build a production-grade, real-time sentiment analysis platform that processes social media posts, analyzes sentiment and emotions using AI models, and provides live visualization through a web dashboard. This capstone project demonstrates mastery of full-stack AI engineering, including microservices architecture, message queue systems, real-time data processing, and modern web development
 
