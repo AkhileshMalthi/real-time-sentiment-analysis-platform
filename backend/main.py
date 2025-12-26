@@ -57,13 +57,22 @@ async def lifespan(app: FastAPI):
     
     # Start alert monitoring service in background
     alert_task = None
+    ws_metrics_task = None
+    ws_monitor_task = None
     try:
         logger.info("🚨 Starting alert monitoring service...")
         alert_service = await get_alert_service()
         alert_task = asyncio.create_task(alert_service.run_monitoring_loop())
         logger.info("✅ Alert monitoring service started")
+        
+        # Start WebSocket background tasks
+        logger.info("🔌 Starting WebSocket monitoring tasks...")
+        from api.websocket import send_periodic_metrics, monitor_new_posts
+        ws_metrics_task = asyncio.create_task(send_periodic_metrics())
+        ws_monitor_task = asyncio.create_task(monitor_new_posts())
+        logger.info("✅ WebSocket monitoring tasks started")
     except Exception as e:
-        logger.warning(f"⚠️  Alert monitoring service failed to start: {e}")
+        logger.warning(f"⚠️  Background services failed to start: {e}")
     
     logger.info("✅ Backend API ready to accept requests")
     
@@ -77,6 +86,20 @@ async def lifespan(app: FastAPI):
             await alert_task
         except asyncio.CancelledError:
             logger.info("✅ Alert monitoring service stopped")
+    
+    # Stop WebSocket tasks
+    if ws_metrics_task:
+        ws_metrics_task.cancel()
+        try:
+            await ws_metrics_task
+        except asyncio.CancelledError:
+            pass
+    if ws_monitor_task:
+        ws_monitor_task.cancel()
+        try:
+            await ws_monitor_task
+        except asyncio.CancelledError:
+            pass
 
 # Create FastAPI application
 app = FastAPI(

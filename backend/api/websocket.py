@@ -120,6 +120,9 @@ async def monitor_new_posts():
                 result = await db.execute(query)
                 rows = result.all()
                 
+                if rows:
+                    print(f"Found {len(rows)} new posts to broadcast")
+                
                 for post, sentiment_data in rows:
                     # Truncate content to first 100 characters
                     content_preview = post.content[:100] + "..." if len(post.content) > 100 else post.content
@@ -130,10 +133,14 @@ async def monitor_new_posts():
                             "post_id": post.post_id,
                             "content": content_preview,
                             "source": post.source,
-                            "sentiment_label": sentiment_data.sentiment_label if sentiment_data else None,
-                            "confidence_score": sentiment_data.confidence_score if sentiment_data else None,
-                            "emotion": sentiment_data.emotion if sentiment_data else None,
-                            "timestamp": post.created_at.isoformat() if post.created_at else datetime.now(timezone.utc).isoformat()
+                            "author": post.author,
+                            "created_at": post.created_at.isoformat() if post.created_at else datetime.now(timezone.utc).isoformat(),
+                            "sentiment": {
+                                "label": sentiment_data.sentiment_label if sentiment_data else None,
+                                "confidence": sentiment_data.confidence_score if sentiment_data else None,
+                                "emotion": sentiment_data.emotion if sentiment_data else None,
+                                "model_name": sentiment_data.model_name if sentiment_data else None
+                            }
                         }
                     }
                     
@@ -145,17 +152,7 @@ async def monitor_new_posts():
             print(f"Error monitoring new posts: {e}")
             await asyncio.sleep(5)
 
-# Start background tasks
-metrics_task = None
-monitor_task = None
-
-@router.on_event("startup")
-async def startup_event():
-    """Start background tasks on application startup"""
-    global metrics_task, monitor_task
-    metrics_task = asyncio.create_task(send_periodic_metrics())
-    monitor_task = asyncio.create_task(monitor_new_posts())
-
+# WebSocket endpoint
 @router.websocket("/ws/sentiment")
 async def websocket_endpoint(websocket: WebSocket):
     """WebSocket endpoint for real-time sentiment updates"""

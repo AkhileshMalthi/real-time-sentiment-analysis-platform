@@ -64,14 +64,20 @@ class SentimentAnalyzer:
             result = self.sentiment_pipe(text[:512])[0]
             # Map labels to lowercase standard
             label = result['label'].lower()
-            if label == 'positive' or label == 'negative':
+            confidence = float(result['score'])
+            
+            # Treat low-confidence predictions as neutral
+            # If confidence is below 0.75, classify as neutral
+            if confidence < 0.75:
+                final_label = 'neutral'
+            elif label in ['positive', 'negative']:
                 final_label = label
             else:
                 final_label = 'neutral'
                 
             return {
                 'sentiment_label': final_label,
-                'confidence_score': float(result['score']),
+                'confidence_score': confidence,
                 'model_name': self.sentiment_pipe.model.config._name_or_path
             }
         else:

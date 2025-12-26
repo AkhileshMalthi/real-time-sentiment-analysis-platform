@@ -15,5 +15,5 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 # Copy application code
 COPY . ./
 
-# This keeps the container alive so we can test connectivity
-CMD ["tail", "-f", "/dev/null"]
+# Run database initialization and start the FastAPI server
+CMD ["sh", "-c", "python init_db.py && uvicorn main:app --host 0.0.0.0 --port 8000"]

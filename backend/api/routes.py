@@ -7,6 +7,12 @@ import os
 import json
 import redis.asyncio as aioredis
 
+# Import models
+from models.database import SocialMediaPost, SentimentAnalysis, SentimentAlert
+
+# Import services
+from services.aggregator import AggregatorService
+
 router = APIRouter()
 
 # Database setup
@@ -17,12 +23,6 @@ AsyncSessionLocal = async_sessionmaker(engine, expire_on_commit=False)
 # Redis setup
 REDIS_HOST = os.getenv("REDIS_HOST", "localhost")
 REDIS_PORT = int(os.getenv("REDIS_PORT", 6379))
-
-# Import models
-from models.database import SocialMediaPost, SentimentAnalysis, SentimentAlert
-
-# Import services
-from services.aggregator import AggregatorService
 
 # Dependency to get DB session
 async def get_db():
@@ -40,29 +40,7 @@ async def get_redis():
 @router.get("/api/health")
 async def health_check(db: AsyncSession = Depends(get_db), redis_client = Depends(get_redis)):
     """
-    Check system health and connectivity
-    
-    Returns:
-        {
-            "status": "healthy" | "degraded" | "unhealthy",
-            "timestamp": "2025-01-15T10:30:00Z",
-            "services": {
-                "database": "connected" | "disconnected",
-                "redis": "connected" | "disconnected"
-            },
-            "stats": {
-                "total_posts": 15234,
-                "total_analyses": 15234,
-                "recent_posts_1h": 342
-            }
-        }
-    
-    Implementation:
-    - Ping database (execute simple query)
-    - Ping Redis (execute PING command)
-    - Count total records in social_media_posts
-    - Count posts from last hour
-    - Return appropriate HTTP status: 200 if healthy, 503 if any service down
+    Health check endpoint to verify database and Redis connectivity.
     """
     services_status = {"database": "disconnected", "redis": "disconnected"}
     stats = {"total_posts": 0, "total_analyses": 0, "recent_posts_1h": 0}
@@ -130,51 +108,28 @@ async def get_posts(
     db: AsyncSession = Depends(get_db)
 ):
     """
-    Retrieve posts with filtering and pagination
-    
+    Retrieve social media posts with optional filters and pagination.
+
     Query Parameters:
-        limit: Max posts to return (1-100, default 50)
-        offset: Number of posts to skip (pagination)
-        source: Filter by platform (e.g., 'reddit', 'twitter')
-        sentiment: Filter by sentiment ('positive', 'negative', 'neutral')
-        start_date: Filter posts created after this datetime
-        end_date: Filter posts created before this datetime
-    
+        limit: Number of posts to return (default 50, max 100)
+        offset: Number of posts to skip (default 0)
+        source: Filter by social media platform (e.g., 'twitter', 'facebook')
+        sentiment: Filter by sentiment label (e.g., 'positive', 'negative', 'neutral')
+        start_date: Filter posts created after this date (ISO 8601 format)
+        end_date: Filter posts created before this date (ISO 8601 format)
     Returns:
         {
-            "posts": [
-                {
-                    "post_id": "abc123",
-                    "source": "reddit",
-                    "content": "Post content...",
-                    "author": "username",
-                    "created_at": "2025-01-15T10:00:00Z",
-                    "sentiment": {
-                        "label": "positive",
-                        "confidence": 0.95,
-                        "emotion": "joy",
-                        "model_name": "distilbert-base..."
-                    }
-                },
-                ...
-            ],
-            "total": 1523,
+            "posts": [...],
+            "total": 100,
             "limit": 50,
             "offset": 0,
             "filters": {
-                "source": "reddit",
-                "sentiment": null,
-                "start_date": null,
-                "end_date": null
+                "source": "twitter",
+                "sentiment": "positive",
+                "start_date": "2025-01-14T10:00:00Z",
+                "end_date": "2025-01-15T10:00:00Z"
             }
         }
-    
-    Implementation:
-    - Join social_media_posts with sentiment_analysis
-    - Apply filters based on query parameters
-    - Order by created_at DESC (most recent first)
-    - Use limit/offset for pagination
-    - Return total count for pagination UI
     """
     # Build query with join
     query = select(SocialMediaPost, SentimentAnalysis).join(
