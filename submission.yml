@@ -1,0 +1,34 @@
+# submission.yml for Sentiment Analysis Platform
+
+version: 1
+
+services:
+  up:
+    cmd: docker-compose up -d
+    desc: Start all services in detached mode
+  health:
+    cmd: docker-compose ps
+    desc: Check all services are running
+
+backend:
+  health:
+    cmd: curl -f http://localhost:8000/api/health
+    desc: Ensure backend API is healthy
+
+frontend:
+  health:
+    cmd: curl -f http://localhost:3000
+    desc: Ensure frontend dashboard loads
+
+backend:
+  test:
+    cmd: docker-compose exec backend pytest -v
+    desc: Run all backend tests
+  coverage:
+    cmd: docker-compose exec backend pytest --cov=.
+    desc: Check backend test coverage
+
+services:
+  down:
+    cmd: docker-compose down -v
+    desc: Stop all services and remove volumes
