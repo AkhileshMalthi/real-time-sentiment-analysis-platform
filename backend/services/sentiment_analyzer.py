@@ -79,6 +79,16 @@ class SentimentAnalyzer:
             logger.info(f"Using external LLM API: {self.llm_model}")
 
     async def analyze_sentiment(self, text: str) -> dict:
+        """
+        Analyze sentiment of the given text.
+
+        Returns:
+            {
+                "sentiment_label": "positive|negative|neutral",
+                "confidence_score": 0.85,
+                "model_name": "model_identifier"
+            }
+        """
         if not text:
             return {"sentiment_label": "neutral", "confidence_score": 0.0, "model_name": "none"}
         
@@ -91,15 +101,27 @@ class SentimentAnalyzer:
             label = result['label'].lower()
             confidence = float(result['score'])
             
-            # Treat low-confidence predictions as neutral
-            # If confidence is below 0.75, classify as neutral
+            # If confidence is low, delegate to external LLM for a more
+            # calibrated classification. Fall back to neutral on failure.
             if confidence < 0.75:
-                final_label = 'neutral'
-            elif label in ['positive', 'negative']:
+                try:
+                    logger.info("Low-confidence (%.3f) from local model — delegating to external LLM", confidence)
+                    return await self._analyze_external(text, "sentiment")
+                except Exception as e:
+                    logger.warning("External sentiment analysis failed, falling back to low-confidence neutral: %s", e)
+                    return {
+                        'sentiment_label': 'neutral',
+                        'confidence_score': confidence,
+                        'model_name': self.sentiment_pipe.model.config._name_or_path
+                    }
+
+            # For sufficiently confident local predictions, map labels to final value
+            if label in ['positive', 'negative']:
                 final_label = label
             else:
-                final_label = 'neutral'
-                
+                logger.info("Mapping label that is neither, '%s' to 'neutral'", label)
+                final_label = 'neutral' # Map any other labels to neutral (Just in case)
+
             return {
                 'sentiment_label': final_label,
                 'confidence_score': confidence,
