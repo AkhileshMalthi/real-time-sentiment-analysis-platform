@@ -10,7 +10,7 @@ COPY pyproject.toml uv.lock ./
 
 # Install dependencies system-wide (no venv needed in container)
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv pip install --system -r pyproject.toml
+    uv pip install --system -r pyproject.toml --group dev
 
 # Copy application code
 COPY . ./

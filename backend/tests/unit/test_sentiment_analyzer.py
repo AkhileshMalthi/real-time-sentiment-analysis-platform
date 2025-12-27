@@ -47,7 +47,7 @@ class TestSentimentAnalyzerLocal:
     @pytest.fixture
     def analyzer(self):
         """Create a local sentiment analyzer instance."""
-        with patch('backend.services.sentiment_analyzer.pipeline') as mock_pipeline:
+        with patch('services.sentiment_analyzer.pipeline') as mock_pipeline:
             # Mock the pipeline to avoid loading actual models
             mock_sentiment_pipe = Mock()
             mock_emotion_pipe = Mock()
@@ -372,7 +372,7 @@ class TestSentimentAnalyzerEdgeCases:
     @pytest.mark.asyncio
     async def test_special_characters_handling(self):
         """Test handling of special characters in text."""
-        with patch('backend.services.sentiment_analyzer.pipeline') as mock_pipeline:
+        with patch('services.sentiment_analyzer.pipeline') as mock_pipeline:
             mock_pipe = Mock()
             mock_pipeline.return_value = mock_pipe
             mock_pipe.return_value = [{'label': 'POSITIVE', 'score': 0.8}]
@@ -389,7 +389,7 @@ class TestSentimentAnalyzerEdgeCases:
     @pytest.mark.asyncio
     async def test_unicode_handling(self):
         """Test handling of Unicode characters."""
-        with patch('backend.services.sentiment_analyzer.pipeline') as mock_pipeline:
+        with patch('services.sentiment_analyzer.pipeline') as mock_pipeline:
             mock_pipe = Mock()
             mock_pipeline.return_value = mock_pipe
             mock_pipe.return_value = [{'label': 'POSITIVE', 'score': 0.8}]
@@ -406,13 +406,19 @@ class TestSentimentAnalyzerEdgeCases:
     @pytest.mark.asyncio
     async def test_whitespace_only_text(self):
         """Test handling of whitespace-only text."""
-        with patch('backend.services.sentiment_analyzer.pipeline') as mock_pipeline:
+        with patch('services.sentiment_analyzer.pipeline') as mock_pipeline:
             mock_pipe = Mock()
             mock_pipeline.return_value = mock_pipe
+            mock_pipe.return_value = [{'label': 'NEUTRAL', 'score': 0.5}]
+            mock_pipe.model.config._name_or_path = "test-model"
             
             analyzer = SentimentAnalyzer(model_type='local')
+            analyzer.sentiment_pipe = mock_pipe
             
-            # Empty string handling
+            # Whitespace-only strings are processed (not treated as empty)
             result = await analyzer.analyze_sentiment("   ")
-            # The current implementation treats this as non-empty
-            # but the pipeline would process it
+            
+            # Service processes whitespace text, returns result from pipeline
+            assert 'sentiment_label' in result
+            assert 'confidence_score' in result
+

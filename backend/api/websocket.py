@@ -4,7 +4,14 @@ from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sess
 from sqlalchemy import select, func, and_
 import asyncio
 import os
+import logging
 from models.database import SocialMediaPost, SentimentAnalysis
+
+logger = logging.getLogger(__name__)
+logging.basicConfig(
+    level=os.getenv("LOG_LEVEL", "INFO"),
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
 
 router = APIRouter()
 
@@ -20,10 +27,12 @@ class ConnectionManager:
     async def connect(self, websocket: WebSocket):
         await websocket.accept()
         self.active_connections.append(websocket)
+        logger.info(f"Client {websocket.client} connected. Total connections: {len(self.active_connections)}")
 
     def disconnect(self, websocket: WebSocket):
         if websocket in self.active_connections:
             self.active_connections.remove(websocket)
+            logger.info(f"Client {websocket.client} disconnected. Total connections: {len(self.active_connections)}")
 
     async def broadcast(self, message: dict):
         """Broadcast message to all connected clients"""
@@ -32,7 +41,7 @@ class ConnectionManager:
             try:
                 await connection.send_json(message)
             except Exception as e:
-                print(f"Error sending to client: {e}")
+                logger.exception(f"Error sending to client: {e}")
                 disconnected.append(connection)
         
         # Remove disconnected clients
@@ -42,7 +51,16 @@ class ConnectionManager:
 manager = ConnectionManager()
 
 async def get_metrics_data():
-    """Get sentiment metrics for different timeframes"""
+    """
+    Get sentiment metrics for different timeframes
+
+    Returns:
+        {
+            "last_minute": {"positive": int, "negative": int, "neutral": int, "total": int},
+            "last_hour": {"positive": int, "negative": int, "neutral": int, "total": int},
+            "last_24_hours": {"positive": int, "negative": int, "neutral": int, "total": int
+        }
+    """
     async with AsyncSessionLocal() as db:
         metrics = {
             "last_minute": {"positive": 0, "negative": 0, "neutral": 0, "total": 0},
@@ -51,6 +69,9 @@ async def get_metrics_data():
         }
         
         now = datetime.now(timezone.utc)
+        
+        logger.info(f"Calculating sentiment metrics for timeframes up to {now.isoformat()}")
+
         timeframes = {
             "last_minute": now - timedelta(minutes=1),
             "last_hour": now - timedelta(hours=1),
@@ -58,6 +79,7 @@ async def get_metrics_data():
         }
         
         for timeframe_key, threshold in timeframes.items():
+            logger.debug(f"Querying sentiment counts for timeframe '{timeframe_key}' since {threshold.isoformat()}")
             query = select(
                 SentimentAnalysis.sentiment_label,
                 func.count(SentimentAnalysis.id).label('count')
@@ -67,6 +89,7 @@ async def get_metrics_data():
             
             result = await db.execute(query)
             rows = result.all()
+            logger.debug(f"Sentiment counts for timeframe '{timeframe_key}': {rows}")
             
             for row in rows:
                 sentiment_label = row[0]
@@ -74,6 +97,7 @@ async def get_metrics_data():
                 metrics[timeframe_key][sentiment_label] = count_value
                 metrics[timeframe_key]["total"] += count_value
         
+        logger.info(f"Calculated metrics: {metrics}")
         return metrics
 
 async def send_periodic_metrics():
@@ -103,9 +127,10 @@ async def monitor_new_posts():
         try:
             await asyncio.sleep(2)  # Check every 2 seconds
             
+            # Check if there are any active connections
             if len(manager.active_connections) == 0:
                 last_check = datetime.now(timezone.utc)
-                continue
+                continue # Skip if no clients connected
             
             async with AsyncSessionLocal() as db:
                 # Query for new posts since last check
@@ -121,7 +146,7 @@ async def monitor_new_posts():
                 rows = result.all()
                 
                 if rows:
-                    print(f"Found {len(rows)} new posts to broadcast")
+                    logger.info(f"Found {len(rows)} new posts to broadcast")
                 
                 for post, sentiment_data in rows:
                     # Truncate content to first 100 characters
