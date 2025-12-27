@@ -10,12 +10,13 @@ COPY worker/pyproject.toml worker/uv.lock ./
 
 # Install dependencies system-wide (no venv needed in container)
 RUN --mount=type=cache,target=/root/.cache/uv \
-    UV_HTTP_TIMEOUT=600 uv pip install --system -r pyproject.toml
+    UV_HTTP_TIMEOUT=600 uv pip install --system -r pyproject.toml --group dev
 
 # Copy shared backend code (sentiment analyzer and models)
 COPY backend/services/ ./backend/services/
 COPY backend/models/ ./backend/models/
 COPY backend/__init__.py ./backend/__init__.py
+
 
 # Copy worker application code
 COPY worker/*.py ./

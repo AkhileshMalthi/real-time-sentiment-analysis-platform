@@ -10,7 +10,7 @@ sys.modules['transformers'] = MagicMock()
 sys.modules['redis'] = MagicMock()
 sys.modules['redis.asyncio'] = MagicMock()
 
-from worker.worker import SentimentWorker
+from worker import SentimentWorker
 
 
 class TestSentimentWorker:
